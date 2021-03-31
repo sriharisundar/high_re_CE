@@ -17,7 +17,7 @@ setup_requirements = [ ]
 test_requirements = [ ]
 
 setup(
-    author="Srihari Sundar",
+    author="Srihari Sundar",
     author_email='sriharisundar95@gmail.com',
     python_requires='>=3.5',
     classifiers=[
