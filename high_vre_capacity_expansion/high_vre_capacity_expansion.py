@@ -2,6 +2,9 @@
 import pyomo.environ as pyo
 
 
+# TODO: 1. separate modules
+#   2. Make code work when storage is False
+
 def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_included=True,
                      solar_params=None, wind_params=None, other_params=None, storage_params=None,
                      ):
@@ -29,36 +32,36 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.othergens_n = othergens_n
     model.storage_included = storage_included
 
-    if solar_nsites != 0:
-        model.solar_sitelist = pyo.RangeSet(model.solar_nsites)
-        model.solar_capacities = pyo.Var(model.solar_sitelist, initialize=0, domain=pyo.NonNegativeReals)
-        model.solar_generation = pyo.Var(model.solar_sitelist, model.time, domain=pyo.NonNegativeReals)
+    model.solar_sitelist = pyo.RangeSet(model.solar_nsites)
+    model.solar_capacities = pyo.Var(model.solar_sitelist, initialize=0, domain=pyo.NonNegativeReals)
+    model.solar_generation = pyo.Var(model.solar_sitelist, model.time, domain=pyo.NonNegativeReals)
+    if model.solar_nsites != 0:
         model.InstallCost_solar = pyo.Param(initialize=solar_params['InstallCost_solar'])
         model.VarCost_solar = pyo.Param(initialize=solar_params['VarCost_solar'])
         model.solar_potential = pyo.Param(model.solar_sitelist, model.time, initialize=solar_params['solar_potential'])
 
-    if wind_nsites != 0:
-        model.wind_sitelist = pyo.RangeSet(model.wind_nsites)
-        model.wind_capacities = pyo.Var(model.wind_sitelist, initialize=0, domain=pyo.NonNegativeReals)
-        model.wind_generation = pyo.Var(model.wind_sitelist, model.time, domain=pyo.NonNegativeReals)
+    model.wind_sitelist = pyo.RangeSet(model.wind_nsites)
+    model.wind_capacities = pyo.Var(model.wind_sitelist, initialize=0, domain=pyo.NonNegativeReals)
+    model.wind_generation = pyo.Var(model.wind_sitelist, model.time, domain=pyo.NonNegativeReals)
+    if model.wind_nsites != 0:
         model.InstallCost_wind = pyo.Param(initialize=wind_params['InstallCost_wind'])
         model.VarCost_wind = pyo.Param(initialize=wind_params['VarCost_wind'])
         model.wind_potential = pyo.Param(model.wind_sitelist, model.time, initialize=wind_params['wind_potential'])
 
-    if othergens_n != 0:
-        model.othergens_sitelist = pyo.RangeSet(model.othergens_n)
-        model.other_capacities = pyo.Var(model.othergens_sitelist, initialize=0, domain=pyo.NonNegativeReals)
-        model.other_generation = pyo.Var(model.othergens_sitelist, model.time, domain=pyo.NonNegativeReals)
+    model.othergens_sitelist = pyo.RangeSet(model.othergens_n)
+    model.other_capacities = pyo.Var(model.othergens_sitelist, initialize=0, domain=pyo.NonNegativeReals)
+    model.other_generation = pyo.Var(model.othergens_sitelist, model.time, domain=pyo.NonNegativeReals)
+    if model.othergens_n != 0:
         model.InstallCost_other = pyo.Param(initialize=other_params['InstallCost_other'])
         model.VarCost_other = pyo.Param(initialize=other_params['VarCost_other'])
         model.other_CF = pyo.Param(initialize=other_params['other_CF'])
         model.other_maxusage = pyo.Param(initialize=other_params['other_maxusage'])
 
-    if storage_included is True:
-        model.storage_capacities = pyo.Var(initialize=0, domain=pyo.NonNegativeReals)
-        model.storage_state = pyo.Var(model.time_storage, initialize=0, domain=pyo.NonNegativeReals)
-        model.storage_charge = pyo.Var(model.time, domain=pyo.NonNegativeReals)
-        model.storage_discharge = pyo.Var(model.time, domain=pyo.NonNegativeReals)
+    model.storage_capacities = pyo.Var(initialize=0, domain=pyo.NonNegativeReals)
+    model.storage_state = pyo.Var(model.time_storage, initialize=0, domain=pyo.NonNegativeReals)
+    model.storage_charge = pyo.Var(model.time, domain=pyo.NonNegativeReals)
+    model.storage_discharge = pyo.Var(model.time, domain=pyo.NonNegativeReals)
+    if model.storage_included is True:
         model.InstallCost_storage = pyo.Param(initialize=storage_params['InstallCost_storage'])
         model.VarCost_storage = pyo.Param(initialize=storage_params['VarCost_storage'])
 
@@ -128,11 +131,12 @@ def set_model_wind_constraints(model):
 
 def set_model_othergen_constraints(model):
     model.other_gen_constraint = pyo.ConstraintList()
-    expr = sum(model.other_generation[t] for t in model.time) <= model.other_maxusage * sum(
-        model.Demand[t] for t in model.time)
+    expr = sum(model.other_generation[i, t] for i in model.othergens_sitelist for t in model.time) <= \
+           model.other_maxusage * sum(model.demand[t] for t in model.time)
     model.other_gen_constraint.add(expr)
     for t in model.time:
-        model.other_gen_constraint.add(model.other_generation[t] <= model.other_CF * model.other_capacities)
+        for i in model.othergens_sitelist:
+            model.other_gen_constraint.add(model.other_generation[i, t] <= model.other_CF * model.other_capacities[i])
 
     return
 
@@ -153,11 +157,13 @@ def set_model_storage_constraints(model):
 
 def set_model_demand_constraints(model):
     model.demand_constraint = pyo.ConstraintList()
+
     for t in model.time:
         solar_gen_t = sum(model.solar_generation[i, t] for i in model.solar_sitelist)
         wind_gen_t = sum(model.wind_generation[i, t] for i in model.wind_sitelist)
-        other_t = model.other_generation[t]
+        other_gen_t = sum(model.other_generation[i, t] for i in model.othergens_sitelist)
         storage_t = - model.storage_charge[t] + model.storage_discharge[t]
-        model.demand_constraint.add(solar_gen_t + wind_gen_t + storage_t + other_t == model.Demand[t])
+
+        model.demand_constraint.add(solar_gen_t + wind_gen_t + storage_t + other_gen_t == model.demand[t])
 
     return
