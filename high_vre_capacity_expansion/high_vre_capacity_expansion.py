@@ -68,7 +68,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.storage_round_trip_efficiency = pyo.Param(initialize=storage_params['round_trip_efficiency'])
         model.storage_decay_rate = pyo.Param(initialize=storage_params['decay_rate'])
 
-    model.demand = pyo.Param(model.time, initialize=demand)
+    model.demand = pyo.Param(pyo.RangeSet(1),model.time, initialize=demand)
 
     return model
 
@@ -128,7 +128,7 @@ def set_model_wind_constraints(model):
 def set_model_othergen_constraints(model):
     model.other_gen_constraint = pyo.ConstraintList()
     expr = sum(model.other_generation[i, t] for i in model.othergens_sitelist for t in model.time) <= \
-           model.other_maxusage * sum(model.demand[t] for t in model.time)
+           model.other_maxusage * sum(model.demand[1,t] for t in model.time)
     model.other_gen_constraint.add(expr)
     for t in model.time:
         for i in model.othergens_sitelist:
@@ -164,6 +164,6 @@ def set_model_demand_constraints(model):
         other_gen_t = sum(model.other_generation[i, t] for i in model.othergens_sitelist)
         storage_t = - model.storage_charge[t] + model.storage_discharge[t]
 
-        model.demand_constraint.add(solar_gen_t + wind_gen_t + storage_t + other_gen_t == model.demand[t])
+        model.demand_constraint.add(solar_gen_t + wind_gen_t + storage_t + other_gen_t == model.demand[1,t])
 
     return
