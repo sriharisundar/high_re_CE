@@ -7,3 +7,4 @@ __version__ = '0.1.0'
 
 from .high_vre_capacity_expansion import *
 from .get_dicts_from_dataframe import *
+from .get_dicts_from_numpy import *

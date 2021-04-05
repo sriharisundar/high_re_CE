@@ -4,6 +4,7 @@ import pyomo.environ as pyo
 
 # TODO: 1. separate modules
 #   2. Make code work when storage is False
+#   3. Include hydro - Large portions of WECC are highly dependent on this
 
 def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=True,
                      solar_params=None, wind_params=None, other_params=None, storage_params=None,
@@ -39,8 +40,8 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.InstallCost_solar = pyo.Param(initialize=solar_params['InstallCost_solar'])
         model.VarCost_solar = pyo.Param(initialize=solar_params['VarCost_solar'])
         model.solar_sitearea = pyo.Param(model.solar_sitelist, initialize=solar_params['solar_sitearea'])
-        # power density
-        model.solar_site_PD = pyo.Param(model.solar_sitelist, initialize=solar_params['solar_site_PD'])
+        # capacity density
+        model.solar_site_CD = pyo.Param(model.solar_sitelist, initialize=solar_params['solar_site_CD'])
         model.solar_potential = pyo.Param(model.solar_sitelist, model.time, initialize=solar_params['solar_potential'])
 
     model.wind_sitelist = pyo.RangeSet(model.wind_nsites)
@@ -50,8 +51,8 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.InstallCost_wind = pyo.Param(initialize=wind_params['InstallCost_wind'])
         model.VarCost_wind = pyo.Param(initialize=wind_params['VarCost_wind'])
         model.wind_sitearea = pyo.Param(model.wind_sitelist, initialize=wind_params['wind_sitearea'])
-        # power density
-        model.wind_site_PD = pyo.Param(model.wind_sitelist, initialize=wind_params['wind_site_PD'])
+        # capacity density
+        model.wind_site_CD = pyo.Param(model.wind_sitelist, initialize=wind_params['wind_site_CD'])
         model.wind_potential = pyo.Param(model.wind_sitelist, model.time, initialize=wind_params['wind_potential'])
 
     model.othergens_sitelist = pyo.RangeSet(model.othergens_n)
@@ -120,7 +121,7 @@ def set_model_objective(model):
 def set_model_solar_constraints(model):
     model.solar_gen_constraint = pyo.ConstraintList()
     for i in model.solar_sitelist:
-        model.solar_gen_constraint.add(model.solar_capacities[i] <= model.solar_sitearea[i] * model.solar_site_PD[i])
+        model.solar_gen_constraint.add(model.solar_capacities[i] <= model.solar_sitearea[i] * model.solar_site_CD[i])
     for t in model.time:
         for i in model.solar_sitelist:
             model.solar_gen_constraint.add(model.solar_generation[i, t]
@@ -131,7 +132,7 @@ def set_model_solar_constraints(model):
 def set_model_wind_constraints(model):
     model.wind_gen_constraint = pyo.ConstraintList()
     for i in model.wind_sitelist:
-        model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_sitearea[i] * model.wind_site_PD[i])
+        model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_sitearea[i] * model.wind_site_CD[i])
     for t in model.time:
         for i in model.wind_sitelist:
             model.wind_gen_constraint.add(model.wind_generation[i, t]
@@ -161,7 +162,7 @@ def set_model_storage_constraints(model):
             else:
                 model.storage_constraint.add(
                     model.storage_state[i, t] == (1 - model.storage_decay_rate[i]) * model.storage_state[i, t - 1]
-                    + model.storage_round_trip_efficiency * model.storage_charge[i, t]
+                    + model.storage_round_trip_efficiency[i] * model.storage_charge[i, t]
                     - model.storage_discharge[i, t])
 
             model.storage_constraint.add(model.storage_charge[i, t] <= model.storage_capacities[i])
