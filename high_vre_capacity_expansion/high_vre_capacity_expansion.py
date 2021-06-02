@@ -6,7 +6,7 @@ import pyomo.environ as pyo
 #   2. Make code work when storage is False
 #   3. Include hydro - Large portions of WECC are highly dependent on this
 
-def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=True,
+def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=0,
                      solar_params=None, wind_params=None, other_params=None, storage_params=None,
                      ):
     """
@@ -40,6 +40,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.InstallCost_solar = pyo.Param(initialize=solar_params['InstallCost_solar'])
         model.VarCost_solar = pyo.Param(initialize=solar_params['VarCost_solar'])
         model.solar_sitearea = pyo.Param(model.solar_sitelist, initialize=solar_params['solar_sitearea'])
+        model.solar_capacitycap = pyo.Param(model.solar_sitelist, initialize=solar_params['solar_capacitycap'])
         # capacity density
         model.solar_site_CD = pyo.Param(model.solar_sitelist, initialize=solar_params['solar_site_CD'])
         model.solar_potential = pyo.Param(model.solar_sitelist, model.time, initialize=solar_params['solar_potential'])
@@ -51,6 +52,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.InstallCost_wind = pyo.Param(initialize=wind_params['InstallCost_wind'])
         model.VarCost_wind = pyo.Param(initialize=wind_params['VarCost_wind'])
         model.wind_sitearea = pyo.Param(model.wind_sitelist, initialize=wind_params['wind_sitearea'])
+        model.wind_capacitycap = pyo.Param(model.wind_sitelist, initialize=wind_params['wind_capacitycap'])
         # capacity density
         model.wind_site_CD = pyo.Param(model.wind_sitelist, initialize=wind_params['wind_site_CD'])
         model.wind_potential = pyo.Param(model.wind_sitelist, model.time, initialize=wind_params['wind_potential'])
@@ -62,6 +64,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.InstallCost_other = pyo.Param(model.othergens_sitelist, initialize=other_params['InstallCost_other'])
         model.VarCost_other = pyo.Param(model.othergens_sitelist, initialize=other_params['VarCost_other'])
         model.other_CF = pyo.Param(model.othergens_sitelist, initialize=other_params['other_CF'])
+#        model.other_capacitycap = pyo.Param(model.othergens_sitelist, initialize=other_params['other_capacitycap'])
         model.other_maxusage = pyo.Param(initialize=other_params['other_maxusage'])
 
     model.storage_sitelist = pyo.RangeSet(model.storage_n)
@@ -77,6 +80,9 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.storage_round_trip_efficiency = pyo.Param(model.storage_sitelist,
                                                         initialize=storage_params['round_trip_efficiency'])
         model.storage_decay_rate = pyo.Param(model.storage_sitelist, initialize=storage_params['decay_rate'])
+        # Decay rate is for hourly decay, so if the period is different, this has to be changed.
+
+
 
     model.demand = pyo.Param(pyo.RangeSet(1), model.time, initialize=demand)
 
@@ -122,6 +128,7 @@ def set_model_solar_constraints(model):
     model.solar_gen_constraint = pyo.ConstraintList()
     for i in model.solar_sitelist:
         model.solar_gen_constraint.add(model.solar_capacities[i] <= model.solar_sitearea[i] * model.solar_site_CD[i])
+        model.solar_gen_constraint.add(model.solar_capacities[i] <= model.solar_capacitycap[i])
     for t in model.time:
         for i in model.solar_sitelist:
             model.solar_gen_constraint.add(model.solar_generation[i, t]
@@ -133,6 +140,7 @@ def set_model_wind_constraints(model):
     model.wind_gen_constraint = pyo.ConstraintList()
     for i in model.wind_sitelist:
         model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_sitearea[i] * model.wind_site_CD[i])
+        model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_capacitycap[i])
     for t in model.time:
         for i in model.wind_sitelist:
             model.wind_gen_constraint.add(model.wind_generation[i, t]
@@ -145,6 +153,10 @@ def set_model_othergen_constraints(model):
     expr = sum(model.other_generation[i, t] for i in model.othergens_sitelist for t in model.time) <= \
            model.other_maxusage * sum(model.demand[1, t] for t in model.time)
     model.other_gen_constraint.add(expr)
+
+#    for i in model.othergens_sitelist:
+#        model.other_gen_constraint.add(model.other_capacities[i] <= model.other_capacitycap[i])
+
     for t in model.time:
         for i in model.othergens_sitelist:
             model.other_gen_constraint.add(model.other_generation[i, t]
@@ -162,8 +174,8 @@ def set_model_storage_constraints(model):
             else:
                 model.storage_constraint.add(
                     model.storage_state[i, t] == (1 - model.storage_decay_rate[i]) * model.storage_state[i, t - 1]
-                    + model.storage_round_trip_efficiency[i] * model.storage_charge[i, t]
-                    - model.storage_discharge[i, t])
+                    + model.storage_round_trip_efficiency[i]**0.5 * model.storage_charge[i, t]
+                    - model.storage_round_trip_efficiency[i]**0.5 * model.storage_discharge[i, t])
 
             model.storage_constraint.add(model.storage_charge[i, t] <= model.storage_capacities[i])
             model.storage_constraint.add(model.storage_discharge[i, t] <= model.storage_capacities[i])
@@ -171,8 +183,12 @@ def set_model_storage_constraints(model):
                 model.storage_state[i, t] <= model.storage_EP_ratio[i] * model.storage_capacities[i])
 
     for i in model.storage_sitelist:
-        model.storage_constraint.add(model.storage_capacities[i] <= model.storage_cap[i])
-
+        model.storage_constraint.add(model.storage_capacities[i]
+                                     <= model.storage_cap[i]*(
+                                         sum(model.solar_capacities[i] for i in model.solar_sitelist)
+                                        +sum(model.wind_capacities[i] for i in model.wind_sitelist)
+                                        )
+                                     )
     return
 
 
