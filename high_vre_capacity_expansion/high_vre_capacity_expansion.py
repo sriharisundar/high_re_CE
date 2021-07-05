@@ -84,12 +84,12 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
 
 
 
-    model.demand = pyo.Param(pyo.RangeSet(1), model.time, initialize=demand)
+    model.demand = pyo.Param(model.time, initialize=demand)
 
     return model
 
 
-def set_model_objective(model):
+def set_objective_capacity_expansion(model):
     """
 
     :param model:
@@ -123,6 +123,31 @@ def set_model_objective(model):
 
     return
 
+def set_objective_economic_dispatch(model):
+    """
+
+    :param model:
+    :return:
+    """
+
+    expr_solar_varcost = sum(model.VarCost_solar * model.solar_generation[i, t]
+                             for i in model.solar_sitelist for t in model.time)
+
+    expr_wind_varcost = sum(model.VarCost_wind * model.wind_generation[i, t]
+                            for i in model.wind_sitelist for t in model.time)
+
+    expr_other_varcost = sum(model.VarCost_other[i] * model.other_generation[i, t]
+                             for i in model.othergens_sitelist for t in model.time)
+
+    expr_storage_varcost = sum(model.VarCost_storage[i] * (model.storage_charge[i, t] + model.storage_discharge[i, t])
+                               for i in model.storage_sitelist for t in model.time)
+
+    expr =  expr_solar_varcost + expr_wind_varcost \
+            + expr_other_varcost + expr_storage_varcost
+
+    model.obj = pyo.Objective(expr=expr, sense=pyo.minimize)
+
+    return
 
 def set_model_solar_constraints(model):
     model.solar_gen_constraint = pyo.ConstraintList()
@@ -151,7 +176,7 @@ def set_model_wind_constraints(model):
 def set_model_othergen_constraints(model):
     model.other_gen_constraint = pyo.ConstraintList()
     expr = sum(model.other_generation[i, t] for i in model.othergens_sitelist for t in model.time) <= \
-           model.other_maxusage * sum(model.demand[1, t] for t in model.time)
+           model.other_maxusage * sum(model.demand[t] for t in model.time)
     model.other_gen_constraint.add(expr)
 
 #    for i in model.othergens_sitelist:
@@ -184,10 +209,7 @@ def set_model_storage_constraints(model):
 
     for i in model.storage_sitelist:
         model.storage_constraint.add(model.storage_capacities[i]
-                                     <= model.storage_cap[i]*(
-                                         sum(model.solar_capacities[i] for i in model.solar_sitelist)
-                                        +sum(model.wind_capacities[i] for i in model.wind_sitelist)
-                                        )
+                                     <= model.storage_cap[i]
                                      )
     return
 
@@ -201,6 +223,6 @@ def set_model_demand_constraints(model):
         other_gen_t = sum(model.other_generation[i, t] for i in model.othergens_sitelist)
         storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
 
-        model.demand_constraint.add(solar_gen_t + wind_gen_t + storage_t + other_gen_t == model.demand[1, t])
+        model.demand_constraint.add(solar_gen_t + wind_gen_t + storage_t + other_gen_t == model.demand[t])
 
     return
