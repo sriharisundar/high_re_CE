@@ -64,7 +64,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.InstallCost_other = pyo.Param(model.othergens_sitelist, initialize=other_params['InstallCost_other'])
         model.VarCost_other = pyo.Param(model.othergens_sitelist, initialize=other_params['VarCost_other'])
         model.other_CF = pyo.Param(model.othergens_sitelist, initialize=other_params['other_CF'])
-#        model.other_capacitycap = pyo.Param(model.othergens_sitelist, initialize=other_params['other_capacitycap'])
+        model.other_capacitycap = pyo.Param(model.othergens_sitelist, initialize=other_params['other_capacitycap'])
         model.other_maxusage = pyo.Param(initialize=other_params['other_maxusage'])
 
     model.storage_sitelist = pyo.RangeSet(model.storage_n)
@@ -179,8 +179,8 @@ def set_model_othergen_constraints(model):
            model.other_maxusage * sum(model.demand[t] for t in model.time)
     model.other_gen_constraint.add(expr)
 
-#    for i in model.othergens_sitelist:
-#        model.other_gen_constraint.add(model.other_capacities[i] <= model.other_capacitycap[i])
+    for i in model.othergens_sitelist:
+        model.other_gen_constraint.add(model.other_capacities[i] <= model.other_capacitycap[i])
 
     for t in model.time:
         for i in model.othergens_sitelist:
@@ -208,8 +208,7 @@ def set_model_storage_constraints(model):
                 model.storage_state[i, t] <= model.storage_EP_ratio[i] * model.storage_capacities[i])
 
     for i in model.storage_sitelist:
-        model.storage_constraint.add(model.storage_capacities[i]
-                                     <= model.storage_cap[i]
+        model.storage_constraint.add(model.storage_capacities[i] <= model.storage_cap[i]
                                      )
     return
 
