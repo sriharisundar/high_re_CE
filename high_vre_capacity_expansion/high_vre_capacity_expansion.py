@@ -7,10 +7,12 @@ import pyomo.environ as pyo
 #   3. Include hydro - Large portions of WECC are highly dependent on this
 
 def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=0,
-                     solar_params=None, wind_params=None, other_params=None, storage_params=None,
+                     lossofload_penalty=1e20,
+                     solar_params=None, wind_params=None, other_params=None, storage_params=None
                      ):
     """
 
+    :param lossofload_penalty:
     :param time_steps:
     :param demand:
     :param solar_nsites:
@@ -32,6 +34,9 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.wind_nsites = wind_nsites
     model.othergens_n = othergens_n
     model.storage_n = storage_n
+    model.lossofload_penalty = pyo.Param(initialize=lossofload_penalty)
+
+    model.lossofload = pyo.Var(model.time, initialize=0, domain=pyo.NonNegativeReals)
 
     model.solar_sitelist = pyo.RangeSet(model.solar_nsites)
     model.solar_capacities = pyo.Var(model.solar_sitelist, initialize=0, domain=pyo.NonNegativeReals)
@@ -114,21 +119,21 @@ def set_objective_capacity_expansion(model):
     expr_storage_varcost = sum(model.VarCost_storage[i] * (model.storage_charge[i, t] + model.storage_discharge[i, t])
                                for i in model.storage_sitelist for t in model.time)
 
+    expr_totallossofload = sum(model.lossofload_penalty * model.lossofload[t]
+                             for t in model.time)
+
+
     expr = expr_solar_capacitycost + expr_solar_varcost \
            + expr_wind_capacitycost + expr_wind_varcost \
            + expr_other_capacitycost + expr_other_varcost \
-           + expr_storage_capacitycost + expr_storage_varcost
+           + expr_storage_capacitycost + expr_storage_varcost \
+           + expr_totallossofload
 
     model.obj = pyo.Objective(expr=expr, sense=pyo.minimize)
 
     return
 
 def set_objective_economic_dispatch(model):
-    """
-
-    :param model:
-    :return:
-    """
 
     expr_solar_varcost = sum(model.VarCost_solar * model.solar_generation[i, t]
                              for i in model.solar_sitelist for t in model.time)
@@ -142,8 +147,12 @@ def set_objective_economic_dispatch(model):
     expr_storage_varcost = sum(model.VarCost_storage[i] * (model.storage_charge[i, t] + model.storage_discharge[i, t])
                                for i in model.storage_sitelist for t in model.time)
 
-    expr =  expr_solar_varcost + expr_wind_varcost \
-            + expr_other_varcost + expr_storage_varcost
+    expr_totallossofload = sum(model.lossofload_penalty * model.lossofload[t]
+                             for t in model.time)
+
+    expr = expr_solar_varcost + expr_wind_varcost \
+           + expr_other_varcost + expr_storage_varcost \
+           + expr_totallossofload
 
     model.obj = pyo.Objective(expr=expr, sense=pyo.minimize)
 
@@ -222,6 +231,6 @@ def set_model_demand_constraints(model):
         other_gen_t = sum(model.other_generation[i, t] for i in model.othergens_sitelist)
         storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
 
-        model.demand_constraint.add(solar_gen_t + wind_gen_t + storage_t + other_gen_t == model.demand[t])
+        model.demand_constraint.add(model.demand[t] - (solar_gen_t + wind_gen_t + storage_t + other_gen_t) == model.lossofload[t])
 
     return
