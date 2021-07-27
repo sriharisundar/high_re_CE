@@ -87,8 +87,6 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.storage_decay_rate = pyo.Param(model.storage_sitelist, initialize=storage_params['decay_rate'])
         # Decay rate is for hourly decay, so if the period is different, this has to be changed.
 
-
-
     model.demand = pyo.Param(model.time, initialize=demand)
 
     return model
@@ -120,8 +118,7 @@ def set_objective_capacity_expansion(model):
                                for i in model.storage_sitelist for t in model.time)
 
     expr_totallossofload = sum(model.lossofload_penalty * model.lossofload[t]
-                             for t in model.time)
-
+                               for t in model.time)
 
     expr = expr_solar_capacitycost + expr_solar_varcost \
            + expr_wind_capacitycost + expr_wind_varcost \
@@ -133,8 +130,8 @@ def set_objective_capacity_expansion(model):
 
     return
 
-def set_objective_economic_dispatch(model):
 
+def set_objective_economic_dispatch(model):
     expr_solar_varcost = sum(model.VarCost_solar * model.solar_generation[i, t]
                              for i in model.solar_sitelist for t in model.time)
 
@@ -148,7 +145,7 @@ def set_objective_economic_dispatch(model):
                                for i in model.storage_sitelist for t in model.time)
 
     expr_totallossofload = sum(model.lossofload_penalty * model.lossofload[t]
-                             for t in model.time)
+                               for t in model.time)
 
     expr = expr_solar_varcost + expr_wind_varcost \
            + expr_other_varcost + expr_storage_varcost \
@@ -157,6 +154,7 @@ def set_objective_economic_dispatch(model):
     model.obj = pyo.Objective(expr=expr, sense=pyo.minimize)
 
     return
+
 
 def set_model_solar_constraints(model):
     model.solar_gen_constraint = pyo.ConstraintList()
@@ -208,8 +206,8 @@ def set_model_storage_constraints(model):
             else:
                 model.storage_constraint.add(
                     model.storage_state[i, t] == (1 - model.storage_decay_rate[i]) * model.storage_state[i, t - 1]
-                    + model.storage_round_trip_efficiency[i]**0.5 * model.storage_charge[i, t]
-                    - model.storage_round_trip_efficiency[i]**0.5 * model.storage_discharge[i, t])
+                    + model.storage_round_trip_efficiency[i] ** 0.5 * model.storage_charge[i, t]
+                    - model.storage_round_trip_efficiency[i] ** 0.5 * model.storage_discharge[i, t])
 
             model.storage_constraint.add(model.storage_charge[i, t] <= model.storage_capacities[i])
             model.storage_constraint.add(model.storage_discharge[i, t] <= model.storage_capacities[i])
@@ -231,6 +229,7 @@ def set_model_demand_constraints(model):
         other_gen_t = sum(model.other_generation[i, t] for i in model.othergens_sitelist)
         storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
 
-        model.demand_constraint.add(model.demand[t] - (solar_gen_t + wind_gen_t + storage_t + other_gen_t) == model.lossofload[t])
+        model.demand_constraint.add(
+            model.demand[t] - (solar_gen_t + wind_gen_t + storage_t + other_gen_t) == model.lossofload[t])
 
     return
