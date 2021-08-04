@@ -1,5 +1,8 @@
 """Main module."""
+import numpy as np
+import pandas as pd
 import pyomo.environ as pyo
+from pyomo.opt import SolverStatus, TerminationCondition
 
 
 # TODO: 1. separate modules
@@ -233,3 +236,59 @@ def set_model_demand_constraints(model):
             model.demand[t] - (solar_gen_t + wind_gen_t + storage_t + other_gen_t) == model.lossofload[t])
 
     return
+
+def collect_resutls(model,results):
+
+    if (results.solver.status == SolverStatus.ok) and (
+        results.solver.termination_condition == TerminationCondition.optimal):
+
+        installed_capacities = dict()
+
+        installed_capacities['solar_generation'] = pd.DataFrame(index=[t for t in model.time])
+        installed_capacities['solar_capacities'] = np.empty([model.solar_nsites])
+        for i in model.solar_sitelist:
+            installed_capacities['solar_generation'][i - 1] = [model.solar_generation[i, t]() for t in
+                                                        model.time]
+            installed_capacities['solar_capacities'][i - 1] = model.solar_capacities[i]()
+
+        installed_capacities['wind_generation'] = pd.DataFrame(index=[t for t in model.time])
+        installed_capacities['wind_capacities'] = np.empty([model.solar_nsites])
+        for i in model.wind_sitelist:
+            installed_capacities['wind_generation'][i - 1] = [model.wind_generation[i, t]() for t in
+                                                       model.time]
+            installed_capacities['wind_capacities'][i - 1] = model.wind_capacities[i]()
+
+        installed_capacities['other_generation'] = pd.DataFrame(index=[t for t in model.time])
+        installed_capacities['other_capacities'] = np.empty([model.othergens_n])
+        for i in model.othergens_sitelist:
+            installed_capacities['other_generation'][i - 1] = [model.other_generation[i, t]() for t in
+                                                        model.time]
+            installed_capacities['other_capacities'][i - 1] = model.other_capacities[i]()
+
+        installed_capacities['storage'] = pd.DataFrame(index=[t for t in model.time])
+
+        installed_capacities['storage']['charge'] = [model.storage_charge[1, t]() for t in model.time]
+        installed_capacities['storage']['discharge'] = [model.storage_discharge[1, t]() for t in model.time]
+        installed_capacities['storage']['state'] = [model.storage_state[1, t]() for t in model.time]
+
+        installed_capacities['loss_of_load'] = pd.DataFrame(index=[t for t in model.time])
+        installed_capacities['loss_of_load']['Unserved'] = [model.lossofload[t]() for t in model.time]
+
+        installed_capacities['Storage power'] = np.array([model.storage_capacities[1]() for i in model.storage_n])
+        cost = model.obj()
+
+        installed_capacities['installed_capacities'] = {'solar': installed_capacities['solar_capacities'],
+                                'wind': installed_capacities['wind_capacities'],
+                                'Natural gas': installed_capacities['other_capacities'],
+                                'Storage power': installed_capacities['Storage power'],
+                                }
+
+        return installed_capacities,cost
+
+    elif results.solver.termination_condition == TerminationCondition.infeasible:
+        # Do something when model in infeasible
+        raise RuntimeWarning("Model infeasible")
+
+    else:
+        # Something else is wrong
+        raise RuntimeWarning("Some other error occurred")
