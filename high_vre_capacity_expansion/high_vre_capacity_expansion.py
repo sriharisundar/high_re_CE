@@ -237,6 +237,19 @@ def set_model_demand_constraints(model):
 
     return
 
+def set_planning_reserve_margin_constraint(model,time_step_max_demand):
+    model.prm_constraint = pyo.ConstraintList()
+
+    t = time_step_max_demand
+
+    solar_gen_t = sum(model.solar_capacities[i] * model.solar_potential[i, t] for i in model.solar_sitelist)
+    wind_gen_t = sum(model.wind_capacities[i] * model.wind_potential[i, t] for i in model.wind_sitelist)
+    other_gen_t = sum(model.other_CF[i] * model.other_capacities[i] for i in model.othergens_sitelist)
+    storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
+
+    model.prm_constraint.add((solar_gen_t + wind_gen_t + storage_t + other_gen_t) <= 1.15*model.demand[t] )
+
+    return
 
 def collect_resutls(model, results):
     if (results.solver.status == SolverStatus.ok) and \
@@ -246,7 +259,7 @@ def collect_resutls(model, results):
         installed_capacities = dict()
         installed_capacities['Solar'] = np.array([model.solar_capacities[i]() for i in model.solar_sitelist])
         installed_capacities['Wind'] = np.array([model.wind_capacities[i]() for i in model.wind_sitelist])
-        installed_capacities['Other'] = np.array([model.other_capacities[i]() for i in model.othergens_sitelist])
+        installed_capacities['Natural gas'] = np.array([model.other_capacities[i]() for i in model.othergens_sitelist])
         installed_capacities['Storage power'] = np.array([model.storage_capacities[i]()
                                                           for i in model.storage_sitelist])
 
