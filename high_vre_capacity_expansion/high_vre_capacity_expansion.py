@@ -76,14 +76,13 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.other_maxusage = pyo.Param(initialize=other_params['other_maxusage'])
 
     model.storage_sitelist = pyo.RangeSet(model.storage_n)
-    model.storage_capacities = pyo.Var(model.storage_sitelist, initialize=0, domain=pyo.NonNegativeReals)
+    model.storage_capacities = pyo.Param(model.storage_sitelist, initialize=storage_params['storage_capacity'])
     model.storage_state = pyo.Var(model.storage_sitelist, model.time_storage, initialize=0, domain=pyo.NonNegativeReals)
     model.storage_charge = pyo.Var(model.storage_sitelist, model.time, domain=pyo.NonNegativeReals)
     model.storage_discharge = pyo.Var(model.storage_sitelist, model.time, domain=pyo.NonNegativeReals)
     if model.storage_n != 0:
         model.InstallCost_storage = pyo.Param(model.storage_sitelist, initialize=storage_params['InstallCost_storage'])
         model.VarCost_storage = pyo.Param(model.storage_sitelist, initialize=storage_params['VarCost_storage'])
-        model.storage_cap = pyo.Param(model.storage_sitelist, initialize=storage_params['storage_cap'])
         model.storage_EP_ratio = pyo.Param(model.storage_sitelist, initialize=storage_params['EP_ratio'])
         model.storage_round_trip_efficiency = pyo.Param(model.storage_sitelist,
                                                         initialize=storage_params['round_trip_efficiency'])
@@ -217,9 +216,6 @@ def set_model_storage_constraints(model):
             model.storage_constraint.add(
                 model.storage_state[i, t] <= model.storage_EP_ratio[i] * model.storage_capacities[i])
 
-    for i in model.storage_sitelist:
-        model.storage_constraint.add(model.storage_capacities[i] <= model.storage_cap[i]
-                                     )
     return
 
 
@@ -237,7 +233,8 @@ def set_model_demand_constraints(model):
 
     return
 
-def set_planning_reserve_margin_constraint(model,time_step_max_demand):
+
+def set_planning_reserve_margin_constraint(model, time_step_max_demand):
     model.prm_constraint = pyo.ConstraintList()
 
     t = time_step_max_demand
@@ -247,14 +244,14 @@ def set_planning_reserve_margin_constraint(model,time_step_max_demand):
     other_gen_t = sum(model.other_CF[i] * model.other_capacities[i] for i in model.othergens_sitelist)
     storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
 
-    model.prm_constraint.add((solar_gen_t + wind_gen_t + storage_t + other_gen_t) <= 1.15*model.demand[t] )
+    model.prm_constraint.add((solar_gen_t + wind_gen_t + storage_t + other_gen_t) <= 1.15 * model.demand[t])
 
     return
+
 
 def collect_resutls(model, results):
     if (results.solver.status == SolverStatus.ok) and \
         (results.solver.termination_condition == TerminationCondition.optimal):
-
 
         installed_capacities = dict()
         installed_capacities['Solar'] = np.array([model.solar_capacities[i]() for i in model.solar_sitelist])
