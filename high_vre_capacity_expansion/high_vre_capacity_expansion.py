@@ -10,7 +10,7 @@ from pyomo.opt import SolverStatus, TerminationCondition
 #   3. Include hydro - Large portions of WECC are highly dependent on this
 
 def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=0,
-                     lossofload_penalty=1e20,
+                     lossofload_penalty=1e20, RE_maxusage=1,
                      solar_params=None, wind_params=None, other_params=None, storage_params=None
                      ):
     """
@@ -38,6 +38,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.othergens_n = othergens_n
     model.storage_n = storage_n
     model.lossofload_penalty = pyo.Param(initialize=lossofload_penalty)
+    model.RE_maxusage = pyo.Param(initialize=RE_maxusage)
 
     model.lossofload = pyo.Var(model.time, initialize=0, domain=pyo.NonNegativeReals)
 
@@ -182,11 +183,18 @@ def set_model_wind_constraints(model):
     return
 
 
+def set_model_RE_generation_constraints(model):
+    model.RE_generation_constraints = pyo.ConstraintList()
+
+    expr_solar = sum(model.solar_generation[i, t] for i in model.solar_sitelist for t in model.time)
+    expr_wind = sum(model.wind_generation[i, t] for i in model.wind_sitelist for t in model.time)
+
+    model.RE_generation_constraints.add(
+        (expr_solar + expr_wind) <= model.RE_maxusage * sum(model.demand[t] for t in model.time))
+
+
 def set_model_othergen_constraints(model):
     model.other_gen_constraint = pyo.ConstraintList()
-    expr = sum(model.other_generation[i, t] for i in model.othergens_sitelist for t in model.time) <= \
-           model.other_maxusage * sum(model.demand[t] for t in model.time)
-    model.other_gen_constraint.add(expr)
 
     for i in model.othergens_sitelist:
         model.other_gen_constraint.add(model.other_capacities[i] <= model.other_capacitycap[i])
@@ -250,8 +258,8 @@ def set_planning_reserve_margin_constraint(model, time_step_max_demand):
 
 
 def collect_resutls(model, results):
-    if (results.solver.status == SolverStatus.ok) and \
-        (results.solver.termination_condition == TerminationCondition.optimal):
+    if (results.solver.status == SolverStatus.ok) and (
+        TerminationCondition.optimal == results.solver.termination_condition):
 
         installed_capacities = dict()
         installed_capacities['Solar'] = np.array([model.solar_capacities[i]() for i in model.solar_sitelist])
