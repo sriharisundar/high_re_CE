@@ -38,7 +38,8 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.othergens_n = othergens_n
     model.storage_n = storage_n
     model.lossofload_penalty = pyo.Param(initialize=lossofload_penalty)
-    model.RE_maxusage = pyo.Param(initialize=RE_maxusage)
+    model.RE_solarusage = pyo.Param(initialize=RE_solarusage)
+    model.RE_windusage = pyo.Param(initialize=RE_windusage)
 
     model.lossofload = pyo.Var(model.time, initialize=0, domain=pyo.NonNegativeReals)
 
@@ -77,13 +78,14 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.other_maxusage = pyo.Param(initialize=other_params['other_maxusage'])
 
     model.storage_sitelist = pyo.RangeSet(model.storage_n)
-    model.storage_capacities = pyo.Param(model.storage_sitelist, initialize=storage_params['storage_capacity'])
+    model.storage_capacities = pyo.Var(model.storage_sitelist, initialize=0, domain=pyo.NonNegativeReals)
     model.storage_state = pyo.Var(model.storage_sitelist, model.time_storage, initialize=0, domain=pyo.NonNegativeReals)
     model.storage_charge = pyo.Var(model.storage_sitelist, model.time, domain=pyo.NonNegativeReals)
     model.storage_discharge = pyo.Var(model.storage_sitelist, model.time, domain=pyo.NonNegativeReals)
     if model.storage_n != 0:
         model.InstallCost_storage = pyo.Param(model.storage_sitelist, initialize=storage_params['InstallCost_storage'])
         model.VarCost_storage = pyo.Param(model.storage_sitelist, initialize=storage_params['VarCost_storage'])
+        model.storage_cap = pyo.Param(model.storage_sitelist, initialize=storage_params['storage_cap'])
         model.storage_EP_ratio = pyo.Param(model.storage_sitelist, initialize=storage_params['EP_ratio'])
         model.storage_round_trip_efficiency = pyo.Param(model.storage_sitelist,
                                                         initialize=storage_params['round_trip_efficiency'])
@@ -190,7 +192,12 @@ def set_model_RE_generation_constraints(model):
     expr_wind = sum(model.wind_generation[i, t] for i in model.wind_sitelist for t in model.time)
 
     model.RE_generation_constraints.add(
-        (expr_solar + expr_wind) <= model.RE_maxusage * sum(model.demand[t] for t in model.time))
+        expr_solar == model.solar_maxusage * sum(model.demand[t] for t in model.time))
+
+    model.RE_generation_constraints.add(
+        expr_wind == model.wind_maxusage * sum(model.demand[t] for t in model.time))
+
+    return
 
 
 def set_model_othergen_constraints(model):
@@ -224,6 +231,9 @@ def set_model_storage_constraints(model):
             model.storage_constraint.add(
                 model.storage_state[i, t] <= model.storage_EP_ratio[i] * model.storage_capacities[i])
 
+    for i in model.storage_sitelist:
+        model.storage_constraint.add(model.storage_capacities[i] <= model.storage_cap[i]
+                                     )
     return
 
 
