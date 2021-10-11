@@ -192,10 +192,10 @@ def set_model_RE_generation_constraints(model):
     expr_wind = sum(model.wind_generation[i, t] for i in model.wind_sitelist for t in model.time)
 
     model.RE_generation_constraints.add(
-        expr_solar == model.solar_maxusage * sum(model.demand[t] for t in model.time))
+        expr_solar == model.RE_solarusage * sum(model.demand[t] for t in model.time))
 
     model.RE_generation_constraints.add(
-        expr_wind == model.wind_maxusage * sum(model.demand[t] for t in model.time))
+        expr_wind == model.RE_windusage * sum(model.demand[t] for t in model.time))
 
     return
 
@@ -275,7 +275,7 @@ def collect_resutls(model, results):
         installed_capacities['Solar'] = np.array([model.solar_capacities[i]() for i in model.solar_sitelist])
         installed_capacities['Wind'] = np.array([model.wind_capacities[i]() for i in model.wind_sitelist])
         installed_capacities['Natural gas'] = np.array([model.other_capacities[i]() for i in model.othergens_sitelist])
-        installed_capacities['Storage power'] = np.array([model.storage_capacities[i]
+        installed_capacities['Storage power'] = np.array([model.storage_capacities[i]()
                                                           for i in model.storage_sitelist])
 
         cost = model.obj()
