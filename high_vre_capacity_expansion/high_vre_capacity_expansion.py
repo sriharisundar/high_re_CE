@@ -10,7 +10,7 @@ from pyomo.opt import SolverStatus, TerminationCondition
 #   3. Include hydro - Large portions of WECC are highly dependent on this
 
 def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=0,
-                     lossofload_penalty=1e20, RE_maxusage=1,
+                     lossofload_penalty=1e20, RE_solarusage=0.5, RE_windusage=0.5,
                      solar_params=None, wind_params=None, other_params=None, storage_params=None
                      ):
     """
