@@ -10,7 +10,7 @@ from pyomo.opt import SolverStatus, TerminationCondition
 #   3. Include hydro - Large portions of WECC are highly dependent on this
 
 def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=0,
-                     lossofload_penalty=1e20, RE_solarusage=0.5, RE_windusage=0.5,
+                     lossofload_penalty=1e20, RE_usage=None, RE_solarusage=None, RE_windusage=None,
                      solar_params=None, wind_params=None, other_params=None, storage_params=None
                      ):
     """
@@ -38,8 +38,13 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.othergens_n = othergens_n
     model.storage_n = storage_n
     model.lossofload_penalty = pyo.Param(initialize=lossofload_penalty)
-    model.RE_solarusage = pyo.Param(initialize=RE_solarusage)
-    model.RE_windusage = pyo.Param(initialize=RE_windusage)
+
+    model.RE_usage = pyo.Param(initialize=RE_usage)
+    model.separate_REusage = False
+    if (RE_solarusage is not None or RE_windusage is not None):
+        model.separate_REusage = True
+        model.RE_solarusage = pyo.Param(initialize=RE_solarusage)
+        model.RE_windusage = pyo.Param(initialize=RE_windusage)
 
     model.lossofload = pyo.Var(model.time, initialize=0, domain=pyo.NonNegativeReals)
 
@@ -191,11 +196,16 @@ def set_model_RE_generation_constraints(model):
     expr_solar = sum(model.solar_generation[i, t] for i in model.solar_sitelist for t in model.time)
     expr_wind = sum(model.wind_generation[i, t] for i in model.wind_sitelist for t in model.time)
 
-    model.RE_generation_constraints.add(
-        expr_solar == model.RE_solarusage * sum(model.demand[t] for t in model.time))
-
-    model.RE_generation_constraints.add(
-        expr_wind == model.RE_windusage * sum(model.demand[t] for t in model.time))
+    if(model.separate_REusage is True):
+        model.RE_generation_constraints.add(
+            expr_solar == model.RE_solarusage * sum(model.demand[t] for t in model.time))
+    
+        model.RE_generation_constraints.add(
+            expr_wind == model.RE_windusage * sum(model.demand[t] for t in model.time))
+    else:
+        model.RE_generation_constraints.add(
+            expr_solar+expr_wind == model.RE_usage * sum(model.demand[t] for t in model.time))
+        
 
     return
 
