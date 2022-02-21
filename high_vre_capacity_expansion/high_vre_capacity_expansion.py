@@ -10,7 +10,8 @@ from pyomo.opt import SolverStatus, TerminationCondition
 #   3. Include hydro - Large portions of WECC are highly dependent on this
 
 def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=0,
-                     lossofload_penalty=1e20, RE_usage=None, RE_solarusage=None, RE_windusage=None,
+                     lossofload_penalty=1e20, RE_usage=None, solar_wind_capacityratio=None,
+                     RE_solarusage=None, RE_windusage=None,
                      solar_params=None, wind_params=None, other_params=None, storage_params=None
                      ):
     """
@@ -41,6 +42,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
 
     model.RE_usage = pyo.Param(initialize=RE_usage)
     model.separate_REusage = False
+    model.solar_wind_capacityratio = pyo.Param(initialize=solar_wind_capacityratio)
     if (RE_solarusage is not None or RE_windusage is not None):
         model.separate_REusage = True
         model.RE_solarusage = pyo.Param(initialize=RE_solarusage)
@@ -209,10 +211,20 @@ def set_model_RE_generation_constraints(model):
     else:
         model.RE_generation_constraints.add(
             expr_solar+expr_wind == model.RE_usage * sum(model.demand[t] for t in model.time))
-
-
     return
 
+
+def set_model_RE_capacityratio_constraints(model):
+    model.RE_capacityratio_constraints = pyo.ConstraintList()
+
+    expr_solar_capacity = sum(model.solar_capacities[i] for i in model.solar_sitelist)
+    expr_wind_capacity = sum(model.wind_capacities[i] for i in model.wind_sitelist)
+
+    if(model.solar_wind_capacityratio is not None):
+        model.RE_capacityratio_constraints.add(
+            expr_solar_capacity == model.solar_wind_capacityratio * expr_wind_capacity)
+
+    return
 
 def set_model_othergen_constraints(model):
     model.other_gen_constraint = pyo.ConstraintList()
@@ -326,4 +338,3 @@ def collect_resutls(model, results):
     else:
         # Something else is wrong
         raise RuntimeWarning("Some other error occurred")
-
