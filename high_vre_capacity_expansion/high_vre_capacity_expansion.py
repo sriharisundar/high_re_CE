@@ -51,6 +51,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.solar_sitelist = pyo.RangeSet(model.solar_nsites)
     model.solar_capacities = pyo.Var(model.solar_sitelist, initialize=0, domain=pyo.NonNegativeReals)
     model.solar_generation = pyo.Var(model.solar_sitelist, model.time, domain=pyo.NonNegativeReals)
+    model.solar_multiplier = pyo.Var(domain=pyo.NonNegativeReals)
     if model.solar_nsites != 0:
         model.InstallCost_solar = pyo.Param(initialize=solar_params['InstallCost_solar'])
         model.VarCost_solar = pyo.Param(initialize=solar_params['VarCost_solar'])
@@ -63,6 +64,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.wind_sitelist = pyo.RangeSet(model.wind_nsites)
     model.wind_capacities = pyo.Var(model.wind_sitelist, initialize=0, domain=pyo.NonNegativeReals)
     model.wind_generation = pyo.Var(model.wind_sitelist, model.time, domain=pyo.NonNegativeReals)
+    model.wind_multiplier = pyo.Var(domain=pyo.NonNegativeReals)
     if model.wind_nsites != 0:
         model.InstallCost_wind = pyo.Param(initialize=wind_params['InstallCost_wind'])
         model.VarCost_wind = pyo.Param(initialize=wind_params['VarCost_wind'])
@@ -169,8 +171,9 @@ def set_objective_economic_dispatch(model):
 def set_model_solar_constraints(model):
     model.solar_gen_constraint = pyo.ConstraintList()
     for i in model.solar_sitelist:
-        model.solar_gen_constraint.add(model.solar_capacities[i] <= model.solar_sitearea[i] * model.solar_site_CD[i])
-        model.solar_gen_constraint.add(model.solar_capacities[i] <= model.solar_capacitycap[i])
+        #model.solar_gen_constraint.add(model.solar_capacities[i] <= model.solar_sitearea[i] * model.solar_site_CD[i])
+        model.solar_gen_constraint.add(model.solar_capacities[i]
+                                            == model.solar_multiplier*model.solar_capacitycap[i])
     for t in model.time:
         for i in model.solar_sitelist:
             model.solar_gen_constraint.add(model.solar_generation[i, t]
@@ -181,8 +184,9 @@ def set_model_solar_constraints(model):
 def set_model_wind_constraints(model):
     model.wind_gen_constraint = pyo.ConstraintList()
     for i in model.wind_sitelist:
-        model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_sitearea[i] * model.wind_site_CD[i])
-        model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_capacitycap[i])
+        #model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_sitearea[i] * model.wind_site_CD[i])
+        model.wind_gen_constraint.add(model.wind_capacities[i]
+                                            == model.wind_multiplier/model.wind_capacitycap[i])
     for t in model.time:
         for i in model.wind_sitelist:
             model.wind_gen_constraint.add(model.wind_generation[i, t]
@@ -199,13 +203,13 @@ def set_model_RE_generation_constraints(model):
     if(model.separate_REusage is True):
         model.RE_generation_constraints.add(
             expr_solar == model.RE_solarusage * sum(model.demand[t] for t in model.time))
-    
+
         model.RE_generation_constraints.add(
             expr_wind == model.RE_windusage * sum(model.demand[t] for t in model.time))
     else:
         model.RE_generation_constraints.add(
             expr_solar+expr_wind == model.RE_usage * sum(model.demand[t] for t in model.time))
-        
+
 
     return
 
@@ -322,3 +326,4 @@ def collect_resutls(model, results):
     else:
         # Something else is wrong
         raise RuntimeWarning("Some other error occurred")
+
