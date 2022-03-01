@@ -16,6 +16,10 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
                      ):
     """
 
+    :param RE_windusage:
+    :param RE_solarusage:
+    :param RE_usage:
+    :param solar_wind_capacityratio:
     :param lossofload_penalty:
     :param time_steps:
     :param demand:
@@ -43,7 +47,7 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.RE_usage = pyo.Param(initialize=RE_usage)
     model.separate_REusage = False
     model.solar_wind_capacityratio = pyo.Param(initialize=solar_wind_capacityratio)
-    if (RE_solarusage is not None or RE_windusage is not None):
+    if RE_solarusage is not None or RE_windusage is not None:
         model.separate_REusage = True
         model.RE_solarusage = pyo.Param(initialize=RE_solarusage)
         model.RE_windusage = pyo.Param(initialize=RE_windusage)
@@ -51,7 +55,6 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
     model.lossofload = pyo.Var(model.time, initialize=0, domain=pyo.NonNegativeReals)
 
     model.solar_sitelist = pyo.RangeSet(model.solar_nsites)
-    model.solar_capacities = pyo.Var(model.solar_sitelist, initialize=0, domain=pyo.NonNegativeReals)
     model.solar_generation = pyo.Var(model.solar_sitelist, model.time, domain=pyo.NonNegativeReals)
     model.solar_multiplier = pyo.Var(domain=pyo.NonNegativeReals)
     if model.solar_nsites != 0:
@@ -64,7 +67,6 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.solar_potential = pyo.Param(model.solar_sitelist, model.time, initialize=solar_params['solar_potential'])
 
     model.wind_sitelist = pyo.RangeSet(model.wind_nsites)
-    model.wind_capacities = pyo.Var(model.wind_sitelist, initialize=0, domain=pyo.NonNegativeReals)
     model.wind_generation = pyo.Var(model.wind_sitelist, model.time, domain=pyo.NonNegativeReals)
     model.wind_multiplier = pyo.Var(domain=pyo.NonNegativeReals)
     if model.wind_nsites != 0:
@@ -113,11 +115,13 @@ def set_objective_capacity_expansion(model):
     :return:
     """
 
-    expr_solar_capacitycost = sum(model.InstallCost_solar * model.solar_capacities[i] for i in model.solar_sitelist)
+    expr_solar_capacitycost = sum(
+        model.InstallCost_solar * model.solar_multiplier * model.solar_capacitycap[i] for i in model.solar_sitelist)
     expr_solar_varcost = sum(model.VarCost_solar * model.solar_generation[i, t]
                              for i in model.solar_sitelist for t in model.time)
 
-    expr_wind_capacitycost = sum(model.InstallCost_wind * model.wind_capacities[i] for i in model.wind_sitelist)
+    expr_wind_capacitycost = sum(
+        model.InstallCost_wind * model.wind_multiplier * model.wind_capacitycap[i] for i in model.wind_sitelist)
     expr_wind_varcost = sum(model.VarCost_wind * model.wind_generation[i, t]
                             for i in model.wind_sitelist for t in model.time)
 
@@ -172,27 +176,25 @@ def set_objective_economic_dispatch(model):
 
 def set_model_solar_constraints(model):
     model.solar_gen_constraint = pyo.ConstraintList()
-    for i in model.solar_sitelist:
-        #model.solar_gen_constraint.add(model.solar_capacities[i] <= model.solar_sitearea[i] * model.solar_site_CD[i])
-        model.solar_gen_constraint.add(model.solar_capacities[i]
-                                            == model.solar_multiplier*model.solar_capacitycap[i])
     for t in model.time:
         for i in model.solar_sitelist:
             model.solar_gen_constraint.add(model.solar_generation[i, t]
-                                           <= model.solar_capacities[i] * model.solar_potential[i, t])
+                                           <= model.solar_multiplier * model.solar_capacitycap[i] *
+                                           model.solar_potential[i, t])
     return
 
 
 def set_model_wind_constraints(model):
     model.wind_gen_constraint = pyo.ConstraintList()
-    for i in model.wind_sitelist:
-        #model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_sitearea[i] * model.wind_site_CD[i])
-        model.wind_gen_constraint.add(model.wind_capacities[i]
-                                            == model.wind_multiplier/model.wind_capacitycap[i])
+    # for i in model.wind_sitelist:
+    # model.wind_gen_constraint.add(model.wind_capacities[i] <= model.wind_sitearea[i] * model.wind_site_CD[i])
+    # model.wind_gen_constraint.add(model.wind_capacities[i] == model.wind_multiplier/model.wind_capacitycap[i])
+
     for t in model.time:
         for i in model.wind_sitelist:
             model.wind_gen_constraint.add(model.wind_generation[i, t]
-                                          <= model.wind_capacities[i] * model.wind_potential[i, t])
+                                          <= model.wind_multiplier * model.wind_capacitycap[i] * model.wind_potential[
+                                              i, t])
     return
 
 
@@ -202,7 +204,7 @@ def set_model_RE_generation_constraints(model):
     expr_solar = sum(model.solar_generation[i, t] for i in model.solar_sitelist for t in model.time)
     expr_wind = sum(model.wind_generation[i, t] for i in model.wind_sitelist for t in model.time)
 
-    if(model.separate_REusage is True):
+    if model.separate_REusage is True:
         model.RE_generation_constraints.add(
             expr_solar == model.RE_solarusage * sum(model.demand[t] for t in model.time))
 
@@ -210,21 +212,22 @@ def set_model_RE_generation_constraints(model):
             expr_wind == model.RE_windusage * sum(model.demand[t] for t in model.time))
     else:
         model.RE_generation_constraints.add(
-            expr_solar+expr_wind == model.RE_usage * sum(model.demand[t] for t in model.time))
+            expr_solar + expr_wind == model.RE_usage * sum(model.demand[t] for t in model.time))
     return
 
 
 def set_model_RE_capacityratio_constraints(model):
     model.RE_capacityratio_constraints = pyo.ConstraintList()
 
-    expr_solar_capacity = sum(model.solar_capacities[i] for i in model.solar_sitelist)
-    expr_wind_capacity = sum(model.wind_capacities[i] for i in model.wind_sitelist)
+    expr_solar_capacity = sum(model.solar_multiplier * model.solar_capacitycap[i] for i in model.solar_sitelist)
+    expr_wind_capacity = sum(model.wind_multiplier * model.wind_capacitycap[i] for i in model.wind_sitelist)
 
-    if(model.solar_wind_capacityratio is not None):
+    if model.solar_wind_capacityratio is not None:
         model.RE_capacityratio_constraints.add(
             expr_solar_capacity == model.solar_wind_capacityratio * expr_wind_capacity)
 
     return
+
 
 def set_model_othergen_constraints(model):
     model.other_gen_constraint = pyo.ConstraintList()
@@ -283,8 +286,10 @@ def set_planning_reserve_margin_constraint(model, time_step_max_demand):
 
     t = time_step_max_demand
 
-    solar_gen_t = sum(model.solar_capacities[i] * model.solar_potential[i, t] for i in model.solar_sitelist)
-    wind_gen_t = sum(model.wind_capacities[i] * model.wind_potential[i, t] for i in model.wind_sitelist)
+    solar_gen_t = sum(
+        model.solar_multiplier * model.solar_capacitycap[i] * model.solar_potential[i, t] for i in model.solar_sitelist)
+    wind_gen_t = sum(
+        model.wind_multiplier * model.wind_capacitycap[i] * model.wind_potential[i, t] for i in model.wind_sitelist)
     other_gen_t = sum(model.other_CF[i] * model.other_capacities[i] for i in model.othergens_sitelist)
     storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
 
@@ -294,12 +299,14 @@ def set_planning_reserve_margin_constraint(model, time_step_max_demand):
 
 
 def collect_resutls(model, results):
-    if (results.solver.status == SolverStatus.ok) and (
-        TerminationCondition.optimal == results.solver.termination_condition):
+    if (results.solver.status == SolverStatus.ok) and \
+       (TerminationCondition.optimal == results.solver.termination_condition):
 
         installed_capacities = dict()
-        installed_capacities['Solar'] = np.array([model.solar_capacities[i]() for i in model.solar_sitelist])
-        installed_capacities['Wind'] = np.array([model.wind_capacities[i]() for i in model.wind_sitelist])
+        installed_capacities['Solar'] = np.array(
+            [model.solar_multiplier * model.solar_capacitycap[i] for i in model.solar_sitelist])
+        installed_capacities['Wind'] = np.array(
+            [model.wind_multiplier * model.wind_capacitycap[i] for i in model.wind_sitelist])
         installed_capacities['Natural gas'] = np.array([model.other_capacities[i]() for i in model.othergens_sitelist])
         installed_capacities['Storage power'] = np.array([model.storage_capacities[i]()
                                                           for i in model.storage_sitelist])
