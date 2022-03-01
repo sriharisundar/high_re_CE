@@ -304,9 +304,9 @@ def collect_resutls(model, results):
 
         installed_capacities = dict()
         installed_capacities['Solar'] = np.array(
-            [model.solar_multiplier * model.solar_capacitycap[i] for i in model.solar_sitelist])
+            [model.solar_multiplier() * model.solar_capacitycap[i] for i in model.solar_sitelist])
         installed_capacities['Wind'] = np.array(
-            [model.wind_multiplier * model.wind_capacitycap[i] for i in model.wind_sitelist])
+            [model.wind_multiplier() * model.wind_capacitycap[i] for i in model.wind_sitelist])
         installed_capacities['Natural gas'] = np.array([model.other_capacities[i]() for i in model.othergens_sitelist])
         installed_capacities['Storage power'] = np.array([model.storage_capacities[i]()
                                                           for i in model.storage_sitelist])
