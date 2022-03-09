@@ -88,7 +88,7 @@ def model_initialize(time_steps, months, hourlims_months, demand,
     model.hydro_sitelist = pyo.RangeSet(model.hydro_nsites)
     model.hydro_capacities = pyo.Var(model.hydro_sitelist, initialize=0, domain=pyo.NonNegativeReals)
     model.hydro_generation = pyo.Var(model.hydro_sitelist, model.time, domain=pyo.NonNegativeReals)
-    if model.hydrogens_n != 0:
+    if model.hydro_nsites != 0:
         model.InstallCost_hydro = pyo.Param(model.hydro_sitelist, initialize=hydro_params['InstallCost_hydro'])
         model.VarCost_hydro = pyo.Param(model.hydro_sitelist, initialize=hydro_params['VarCost_hydro'])
         model.hydro_capacitycap = pyo.Param(model.hydro_sitelist, initialize=hydro_params['hydro_capacitycap'])
@@ -141,8 +141,8 @@ def set_objective_capacity_expansion(model):
                             for i in model.wind_sitelist for t in model.time)
 
     expr_hydro_capacitycost = sum(
-        model.InstallCost_hydro * model.hydro_multiplier * model.hydro_capacitycap[i] for i in model.hydro_sitelist)
-    expr_hydro_varcost = sum(model.VarCost_hydro * model.hydro_generation[i, t]
+        model.InstallCost_hydro[i] * model.hydro_capacities[i] for i in model.hydro_sitelist)
+    expr_hydro_varcost = sum(model.VarCost_hydro[i] * model.hydro_generation[i, t]
                              for i in model.hydro_sitelist for t in model.time)
 
     expr_other_capacitycost = sum(model.InstallCost_other[i] * model.other_capacities[i]
@@ -250,7 +250,7 @@ def set_model_RE_capacityratio_constraints(model):
     return
 
 
-def set_model_hydro_constraints(model):
+def set_model_hydro_constraints(model,hourlims_months):
     model.hydro_constraint = pyo.ConstraintList()
 
     for i in model.hydro_sitelist:
@@ -263,7 +263,7 @@ def set_model_hydro_constraints(model):
 
     for month in model.months:
         for i in model.hydro_sitelist:
-            hours_in_month = pyo.RangeSet(model.hourlims_months[month, 0], model.hourlims_months[month, 1])
+            hours_in_month = pyo.RangeSet(hourlims_months[(month, 1)], hourlims_months[(month, 2)])
             expr_month_generation = sum(model.hydro_generation[i, t] for t in hours_in_month)
             model.hydro_constraint.add(expr_month_generation <= model.hydro_gen_cap[i, month])
 
