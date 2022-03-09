@@ -259,7 +259,7 @@ def set_model_hydro_constraints(model,hourlims_months):
     for t in model.time:
         for i in model.hydro_sitelist:
             model.hydro_constraint.add(model.hydro_generation[i, t]
-                                       <= model.other_capacities[i])
+                                       <= model.hydro_capacities[i])
 
     for month in model.months:
         for i in model.hydro_sitelist:
