@@ -42,7 +42,7 @@ def model_initialize(time_steps, months, hourlims_months, demand,
     model.time = pyo.RangeSet(time_steps[0], time_steps[1])
     model.time_storage = pyo.RangeSet(time_steps[0] - 1, time_steps[1])
     model.months = pyo.RangeSet(months[0], months[1])
-    model.hourlims_months = pyo.Param(model.months, 2, hourlims_months)
+    model.hourlims_months = pyo.Param(model.months, pyo.RangeSet(2), hourlims_months)
 
     model.solar_nsites = solar_nsites
     model.wind_nsites = wind_nsites
