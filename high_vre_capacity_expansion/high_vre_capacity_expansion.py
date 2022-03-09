@@ -9,13 +9,17 @@ from pyomo.opt import SolverStatus, TerminationCondition
 #   2. Make code work when storage is False
 #   3. Include hydro - Large portions of WECC are highly dependent on this
 
-def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergens_n=0, storage_n=0,
+def model_initialize(time_steps, months, hourlims_months, demand,
+                     solar_nsites=0, wind_nsites=0, hydro_nsites=0, othergens_n=0, storage_n=0,
+                     solar_params=None, wind_params=None, hydro_params=None, other_params=None, storage_params=None,
                      lossofload_penalty=1e20, RE_usage=None, solar_wind_capacityratio=None,
                      RE_solarusage=None, RE_windusage=None,
-                     solar_params=None, wind_params=None, other_params=None, storage_params=None
                      ):
     """
 
+    :param hydro_nsites:
+    :param hourlims_months:
+    :param months:
     :param RE_windusage:
     :param RE_solarusage:
     :param RE_usage:
@@ -37,9 +41,12 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
 
     model.time = pyo.RangeSet(time_steps[0], time_steps[1])
     model.time_storage = pyo.RangeSet(time_steps[0] - 1, time_steps[1])
+    model.months = pyo.RangeSet(months[0], months[1])
+    model.hourlims_months = pyo.Param(model.months, 2, hourlims_months)
 
     model.solar_nsites = solar_nsites
     model.wind_nsites = wind_nsites
+    model.hydro_nsites = hydro_nsites
     model.othergens_n = othergens_n
     model.storage_n = storage_n
     model.lossofload_penalty = pyo.Param(initialize=lossofload_penalty)
@@ -78,6 +85,16 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.wind_site_CD = pyo.Param(model.wind_sitelist, initialize=wind_params['wind_site_CD'])
         model.wind_potential = pyo.Param(model.wind_sitelist, model.time, initialize=wind_params['wind_potential'])
 
+    model.hydro_sitelist = pyo.RangeSet(model.hydro_nsites)
+    model.hydro_capacities = pyo.Var(model.hydro_sitelist, initialize=0, domain=pyo.NonNegativeReals)
+    model.hydro_generation = pyo.Var(model.hydro_sitelist, model.time, domain=pyo.NonNegativeReals)
+    if model.hydrogens_n != 0:
+        model.InstallCost_hydro = pyo.Param(model.hydro_sitelist, initialize=hydro_params['InstallCost_hydro'])
+        model.VarCost_hydro = pyo.Param(model.hydro_sitelist, initialize=hydro_params['VarCost_hydro'])
+        model.hydro_CF = pyo.Param(model.hydro_sitelist, initialize=hydro_params['hydro_CF'])
+        model.hydro_capacitycap = pyo.Param(model.hydro_sitelist, initialize=hydro_params['hydro_capacitycap'])
+        model.hydro_gen_cap = pyo.Param(model.hydro_sitelist, model.months, initialize=hydro_params['hydro_gen_cap'])
+
     model.othergens_sitelist = pyo.RangeSet(model.othergens_n)
     model.other_capacities = pyo.Var(model.othergens_sitelist, initialize=0, domain=pyo.NonNegativeReals)
     model.other_generation = pyo.Var(model.othergens_sitelist, model.time, domain=pyo.NonNegativeReals)
@@ -86,7 +103,6 @@ def model_initialize(time_steps, demand, solar_nsites=0, wind_nsites=0, othergen
         model.VarCost_other = pyo.Param(model.othergens_sitelist, initialize=other_params['VarCost_other'])
         model.other_CF = pyo.Param(model.othergens_sitelist, initialize=other_params['other_CF'])
         model.other_capacitycap = pyo.Param(model.othergens_sitelist, initialize=other_params['other_capacitycap'])
-        model.other_maxusage = pyo.Param(initialize=other_params['other_maxusage'])
 
     model.storage_sitelist = pyo.RangeSet(model.storage_n)
     model.storage_capacities = pyo.Var(model.storage_sitelist, initialize=0, domain=pyo.NonNegativeReals)
@@ -125,6 +141,11 @@ def set_objective_capacity_expansion(model):
     expr_wind_varcost = sum(model.VarCost_wind * model.wind_generation[i, t]
                             for i in model.wind_sitelist for t in model.time)
 
+    expr_hydro_capacitycost = sum(
+        model.InstallCost_hydro * model.hydro_multiplier * model.hydro_capacitycap[i] for i in model.hydro_sitelist)
+    expr_hydro_varcost = sum(model.VarCost_hydro * model.hydro_generation[i, t]
+                             for i in model.hydro_sitelist for t in model.time)
+
     expr_other_capacitycost = sum(model.InstallCost_other[i] * model.other_capacities[i]
                                   for i in model.othergens_sitelist)
     expr_other_varcost = sum(model.VarCost_other[i] * model.other_generation[i, t]
@@ -140,6 +161,7 @@ def set_objective_capacity_expansion(model):
 
     expr = expr_solar_capacitycost + expr_solar_varcost \
            + expr_wind_capacitycost + expr_wind_varcost \
+           + expr_hydro_capacitycost + expr_hydro_varcost \
            + expr_other_capacitycost + expr_other_varcost \
            + expr_storage_capacitycost + expr_storage_varcost \
            + expr_totallossofload
@@ -229,6 +251,26 @@ def set_model_RE_capacityratio_constraints(model):
     return
 
 
+def set_model_hydro_constraints(model):
+    model.hydro_constraint = pyo.ConstraintList()
+
+    for i in model.hydro_sitelist:
+        model.hydro_constraint.add(model.hydro_capacities[i] <= model.hydro_capacitycap[i])
+
+    for t in model.time:
+        for i in model.hydro_sitelist:
+            model.hydro_constraint.add(model.hydro_generation[i, t]
+                                       <= model.other_capacities[i])
+
+    for month in model.months:
+        for i in model.hydro_sitelist:
+            hours_in_month = pyo.RangeSet(model.hourlims_months[month, 0], model.hourlims_months[month, 1])
+            expr_month_generation = sum(model.hydro_generation[i, t] for t in hours_in_month)
+            model.hydro_constraint.add(expr_month_generation <= model.hydro_gen_cap[i, month])
+
+    return
+
+
 def set_model_othergen_constraints(model):
     model.other_gen_constraint = pyo.ConstraintList()
 
@@ -238,7 +280,7 @@ def set_model_othergen_constraints(model):
     for t in model.time:
         for i in model.othergens_sitelist:
             model.other_gen_constraint.add(model.other_generation[i, t]
-                                           <= model.other_CF[i] * model.other_capacities[i])
+                                           <= model.other_capacities[i])
 
     return
 
@@ -272,11 +314,12 @@ def set_model_demand_constraints(model):
     for t in model.time:
         solar_gen_t = sum(model.solar_generation[i, t] for i in model.solar_sitelist)
         wind_gen_t = sum(model.wind_generation[i, t] for i in model.wind_sitelist)
+        hydro_gen_t = sum(model.hydro_generation[i, t] for i in model.hydro_sitelist)
         other_gen_t = sum(model.other_generation[i, t] for i in model.othergens_sitelist)
         storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
 
         model.demand_constraint.add(
-            model.demand[t] - (solar_gen_t + wind_gen_t + storage_t + other_gen_t) == model.lossofload[t])
+            model.demand[t] - (solar_gen_t + wind_gen_t + storage_t + other_gen_t + hydro_gen_t) == model.lossofload[t])
 
     return
 
@@ -300,13 +343,14 @@ def set_planning_reserve_margin_constraint(model, time_step_max_demand):
 
 def collect_resutls(model, results):
     if (results.solver.status == SolverStatus.ok) and \
-       (TerminationCondition.optimal == results.solver.termination_condition):
+        (TerminationCondition.optimal == results.solver.termination_condition):
 
         installed_capacities = dict()
         installed_capacities['Solar'] = np.array(
             [model.solar_multiplier() * model.solar_capacitycap[i] for i in model.solar_sitelist])
         installed_capacities['Wind'] = np.array(
             [model.wind_multiplier() * model.wind_capacitycap[i] for i in model.wind_sitelist])
+        installed_capacities['Hydro'] = np.array([model.hydro_capacities[i]() for i in model.hydro_sitelist])
         installed_capacities['Natural gas'] = np.array([model.other_capacities[i]() for i in model.othergens_sitelist])
         installed_capacities['Storage power'] = np.array([model.storage_capacities[i]()
                                                           for i in model.storage_sitelist])
@@ -321,6 +365,10 @@ def collect_resutls(model, results):
         hourly_outputs['wind_generation'] = pd.DataFrame(np.array([[model.wind_generation[i, t]() for t in model.time]
                                                                    for i in model.wind_sitelist]).T,
                                                          index=[t for t in model.time])
+
+        hourly_outputs['hydro_generation'] = pd.DataFrame(np.array([[model.hydro_generation[i, t]() for t in model.time]
+                                                                    for i in model.hydro_sitelist]).T,
+                                                          index=[t for t in model.time])
 
         hourly_outputs['other_generation'] = pd.DataFrame(np.array([[model.other_generation[i, t]() for t in model.time]
                                                                     for i in model.othergens_sitelist]).T,
