@@ -91,7 +91,6 @@ def model_initialize(time_steps, months, hourlims_months, demand,
     if model.hydrogens_n != 0:
         model.InstallCost_hydro = pyo.Param(model.hydro_sitelist, initialize=hydro_params['InstallCost_hydro'])
         model.VarCost_hydro = pyo.Param(model.hydro_sitelist, initialize=hydro_params['VarCost_hydro'])
-        model.hydro_CF = pyo.Param(model.hydro_sitelist, initialize=hydro_params['hydro_CF'])
         model.hydro_capacitycap = pyo.Param(model.hydro_sitelist, initialize=hydro_params['hydro_capacitycap'])
         model.hydro_gen_cap = pyo.Param(model.hydro_sitelist, model.months, initialize=hydro_params['hydro_gen_cap'])
 
