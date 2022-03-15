@@ -318,12 +318,13 @@ def set_model_demand_constraints(model):
         storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
 
         model.demand_constraint.add(
-            model.demand[t] - (solar_gen_t + wind_gen_t + storage_t + other_gen_t + hydro_gen_t) == model.lossofload[t])
+            model.demand[t] - (solar_gen_t + wind_gen_t + hydro_gen_t + storage_t + other_gen_t ) == model.lossofload[t])
 
     return
 
 
-def set_planning_reserve_margin_constraint(model, time_step_max_demand):
+def set_planning_reserve_margin_constraint(model, time_step_max_demand, hydro_CF, other_CF):
+    # other_CF and hydro_CF can be derating based on average CF or using forced outages
     model.prm_constraint = pyo.ConstraintList()
 
     t = time_step_max_demand
@@ -332,10 +333,12 @@ def set_planning_reserve_margin_constraint(model, time_step_max_demand):
         model.solar_multiplier * model.solar_capacitycap[i] * model.solar_potential[i, t] for i in model.solar_sitelist)
     wind_gen_t = sum(
         model.wind_multiplier * model.wind_capacitycap[i] * model.wind_potential[i, t] for i in model.wind_sitelist)
-    other_gen_t = sum(model.other_CF[i] * model.other_capacities[i] for i in model.othergens_sitelist)
-    storage_t = sum(- model.storage_charge[i, t] + model.storage_discharge[i, t] for i in model.storage_sitelist)
+    hydro_gen_t = sum(hydro_CF[i] * model.hydro_capacities[i] for i in model.hydro_sitelist)
+    other_gen_t = sum(other_CF[i] * model.other_capacities[i] for i in model.othergens_sitelist)
+    storage_t = sum(
+        model.storage_round_trip_efficiency[i] ** 0.5 * model.storage_capacities[i] for i in model.storage_sitelist)
 
-    model.prm_constraint.add((solar_gen_t + wind_gen_t + storage_t + other_gen_t) <= 1.15 * model.demand[t])
+    model.prm_constraint.add((solar_gen_t + wind_gen_t + hydro_gen_t + storage_t + other_gen_t) >= 1.15 * model.demand[t])
 
     return
 
