@@ -294,7 +294,7 @@ def set_model_storage_constraints(model):
                 model.storage_constraint.add(
                     model.storage_state[i, t] == (1 - model.storage_decay_rate[i]) * model.storage_state[i, t - 1]
                     + model.storage_round_trip_efficiency[i] ** 0.5 * model.storage_charge[i, t]
-                    - model.storage_round_trip_efficiency[i] ** 0.5 * model.storage_discharge[i, t])
+                    - (1/model.storage_round_trip_efficiency[i]) ** 0.5 * model.storage_discharge[i, t])
 
             model.storage_constraint.add(model.storage_charge[i, t] <= model.storage_capacities[i])
             model.storage_constraint.add(model.storage_discharge[i, t] <= model.storage_capacities[i])
