@@ -53,7 +53,7 @@ def model_initialize(time_steps, months, hourlims_months, demand,
 
     model.RE_usage = pyo.Param(initialize=RE_usage)
     model.separate_REusage = False
-    
+
     if solar_wind_capacityratio is not None:
         model.solar_wind_capacityratio = pyo.Param(initialize=solar_wind_capacityratio)
     else:
@@ -242,16 +242,20 @@ def set_model_RE_generation_constraints(model):
     return
 
 
-def set_model_RE_capacityratio_constraints(model):
+def set_model_RE_capacityratio_constraints(model,solar_multiplier_cap=1e10,wind_multiplier_cap=1e10):
+    model.RE_capacityratio_constraints = pyo.ConstraintList()
 
     expr_solar_capacity = sum(model.solar_multiplier * model.solar_capacitycap[i] for i in model.solar_sitelist)
     expr_wind_capacity = sum(model.wind_multiplier * model.wind_capacitycap[i] for i in model.wind_sitelist)
 
     if model.solar_wind_capacityratio != -1:
-        model.RE_capacityratio_constraints = pyo.ConstraintList()
         model.RE_capacityratio_constraints.add(
             expr_solar_capacity == model.solar_wind_capacityratio * expr_wind_capacity)
-
+    else:
+        model.RE_capacityratio_constraints.add(
+            model.solar_multiplier <= solar_multiplier_cap)
+        model.RE_capacityratio_constraints.add(
+            model.wind_multiplier <= wind_multiplier_cap)
     return
 
 
