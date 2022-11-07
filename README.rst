@@ -1,5 +1,5 @@
 ===========================
-High VRE capacity expansion
+High RE capacity expansion
 ===========================
 
 
