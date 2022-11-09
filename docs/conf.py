@@ -47,8 +47,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'High VRE capacity expansion'
-copyright = "2021, Srihari Sundar"
-author = "Srihari Sundar"
+copyright = "2021, Srihari Sundar"
+author = "Srihari Sundar"
 
 # The version info for the project you're documenting, acts as replacement
 # for |version| and |release|, also used in various other places throughout
@@ -129,7 +129,7 @@ latex_elements = {
 latex_documents = [
     (master_doc, 'high_vre_capacity_expansion.tex',
      'High VRE capacity expansion Documentation',
-     'Srihari Sundar', 'manual'),
+     'Srihari Sundar', 'manual'),
 ]
 
 
