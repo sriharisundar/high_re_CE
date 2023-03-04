@@ -297,7 +297,7 @@ def set_model_storage_constraints(model):
     model.storage_constraint = pyo.ConstraintList()
     for t in model.time:
         for i in model.storage_sitelist:
-            if t == 1:
+            if t == 0:
                 model.storage_constraint.add(model.storage_state[i, t] == 0)
             else:
                 model.storage_constraint.add(
